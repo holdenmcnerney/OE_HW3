@@ -64,7 +64,9 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
     print(f'''R0: {R0}''')
 
     plot_side_by_side(period, current, voltage, ts, tr)
-    # sp.optimize.least_squares()
+    x0 = np.array([1, 1, 1])
+    # Function/initial conditions are bad, this will not work
+    sp.optimize.least_squares(fun_1, x0, args=(time[ps:pe], current[ps:pe], voltage[ps:pe]))
     return params
 
 def soc_stuff(current):
@@ -105,6 +107,12 @@ def plot_side_by_side(period, current, voltage, ts, tr):
     plt.vlines(tr, 0, 70, colors='green')
     plt.show()
     return 1
+
+def fun_1(x, tr, i_ts, v_ts):
+    return x[0]- i_ts * np.exp(-tr / (x[1] * x[2])) - v_ts
+
+# def fun_1(OCV, R1, C1, tr, i_ts, v_ts):
+#     return OCV - i_ts * np.exp(-tr / (R1 * C1)) - v_ts
 
 def main():
 
