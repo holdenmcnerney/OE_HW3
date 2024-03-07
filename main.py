@@ -59,14 +59,16 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
             break
         curr_old = curr
     print(f'''idis: {idis}, ts: {ts}, tr: {tr}''')
-    print(f'''voltage at ts: {voltage[tr]} and voltage at tr: {voltage[ts]}''')
+    print(f'''voltage at tr = 0: {voltage[tr]} and voltage at ts: {voltage[ts]}''')
     R0 = (voltage[tr] - voltage[ts]) / idis
     print(f'''R0: {R0}''')
 
-    plot_side_by_side(period, current, voltage, ts, tr)
-    x0 = np.array([1, 1, 1])
-    # Function/initial conditions are bad, this will not work
-    sp.optimize.least_squares(fun_1, x0, args=(time[ps:pe], current[ps:pe], voltage[ps:pe]))
+    # plot_side_by_side(period, current, voltage, ts, tr)
+    x0_1 = np.array([25, 1, 10])
+    # print(np.array(time[tr:pe]))
+    time_zero_period = (np.array(time[tr:pe]) - tr * 10)
+    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, time_zero_period, voltage[tr:pe]))
+    print(result_1.x)
     return params
 
 def soc_stuff(current):
@@ -108,8 +110,8 @@ def plot_side_by_side(period, current, voltage, ts, tr):
     plt.show()
     return 1
 
-def fun_1(x, tr, i_ts, v_ts):
-    return x[0]- i_ts * np.exp(-tr / (x[1] * x[2])) - v_ts
+def fun_1(x, i_ts, tr, v_tr):
+    return x[0]- i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - v_tr
 
 # def fun_1(OCV, R1, C1, tr, i_ts, v_ts):
 #     return OCV - i_ts * np.exp(-tr / (R1 * C1)) - v_ts
@@ -118,6 +120,7 @@ def main():
 
     file_name = 'pulse_discharge_test_data.csv'
     time, voltage, current = read_data(file_name)
+    print(time[0:100])
     periods = find_periods(current)
     for period in periods:
         params = estimate_parameters(period, current, voltage, time)
