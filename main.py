@@ -49,28 +49,32 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
     params = []
     ps = period[0]
     pe = period[1]
-    # Find R0
-    curr_old = current[int(ps)]
-    for i, curr in enumerate(current[ps:pe]):
-        if curr < 1:
-            idis = curr_old
+    ocv_estimate = voltage[pe]
+    flag = 0
+    for i, (curr, volt) in enumerate(zip(current[ps:pe], voltage[ps:pe])):
+        if curr < 1 and flag == 0:
+            idis = current[i - 1]
             ts = i - 1 + ps
             tr = i + ps
+            flag = 1
+        if flag == 1 and volt >= 0.95 * (ocv_estimate - voltage[tr]) + voltage[tr]:
+            t95 = i + ps
             break
-        curr_old = curr
-    print(f'''idis: {idis}, ts: {ts}, tr: {tr}''')
-    print(f'''voltage at tr = 0: {voltage[tr]} and voltage at ts: {voltage[ts]}''')
+    # print(f'''idis: {idis}, ts: {ts}, tr: {tr}''')
+    # print(f'''voltage at tr = 0: {voltage[tr]} and voltage at ts: {voltage[ts]}''')
     R0 = (voltage[tr] - voltage[ts]) / idis
-    print(f'''R0: {R0}''')
-
-    # NEED TO LIMIT ENDPOINT to OCV > 0.95
-
-    # plot_side_by_side(period, current, voltage, ts, tr)
-    x0_1 = np.array([25, 1, 10])
-    time_zero_period = (np.array(time[tr:pe]) - tr * 10)
-    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, time_zero_period, voltage[tr:pe]))
-    print(result_1.x)
-    params = result_1.x
+    # print(f'''R0: {R0}''')
+    # Optional plotting for understanding the problem
+    # plot_side_by_side(period, current, voltage, ts, tr, t95)
+    x0_1 = np.array([ocv_estimate, 10, 10])
+    x0_2 = np.array([ocv_estimate, 10, 10, 1, 1])
+    x0_3 = np.array([ocv_estimate, 10, 10, 10, 10, 1, 1])
+    time_zero_period = (np.array(time[tr:t95]) - tr * 10)
+    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, time_zero_period, voltage[tr:t95]))
+    result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis, time_zero_period, voltage[tr:t95]))
+    result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis, time_zero_period, voltage[tr:t95]))
+    # print(result_1.x)
+    params = (result_1.x, result_2.x, result_3.x)
     return params
 
 def soc_stuff(current):
@@ -88,7 +92,7 @@ def soc_stuff(current):
     plt.show()
     return 1
 
-def plot_side_by_side(period, current, voltage, ts, tr):
+def plot_side_by_side(period, current, voltage, ts, tr, t95):
     '''
     Plots
     '''
@@ -109,6 +113,7 @@ def plot_side_by_side(period, current, voltage, ts, tr):
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.vlines(ts, 0, 70, colors='orange')
     plt.vlines(tr, 0, 70, colors='green')
+    plt.vlines(t95, 0, 70, colors='blue')
     plt.show()
     return 1
 
@@ -116,28 +121,45 @@ def fun_1(x, i_ts, tr, v_tr):
     '''
     x is composed of OCV, R1, C1 in that order
     '''
-    return x[0]- i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - v_tr
+    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - v_tr
+
+def fun_2(x, i_ts, tr, v_tr):
+    '''
+    x is composed of OCV, R1, C1, R2, C2 in that order
+    '''
+    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) - v_tr
+
+def fun_3(x, i_ts, tr, v_tr):
+    '''
+    x is composed of OCV, R1, C1, R2, C2, R3, C3 in that order
+    '''
+    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) - i_ts * x[5] * np.exp(-tr / (x[5] * x[6])) - v_tr
 
 def main():
-
+    '''
+    Temp
+    '''
     file_name = 'pulse_discharge_test_data.csv'
     time, voltage, current = read_data(file_name)
     periods = find_periods(current)
-    params_all = []
+    params_all_1 = []
+    params_all_2 = []
+    params_all_3 = []
     idx = 0
     for period in periods:
         params = estimate_parameters(period, current, voltage, time)
-        break
-        # if idx == 0:
-        #     params_all = params
-        #     idx += 1
-        # else:
-        #     params_all = np.vstack((params_all, params))
-        # temp break to only test first rest period
-        # break
-
-    # print(params_all)
-
+        if idx == 0:
+            params_all_1 = params[0]
+            params_all_2 = params[1]
+            params_all_3 = params[2]
+            idx += 1
+        else:
+            params_all_1 = np.vstack((params_all_1, params[0]))
+            params_all_2 = np.vstack((params_all_2, params[1]))
+            params_all_3 = np.vstack((params_all_3, params[2]))
+    print(params_all_1)
+    print(params_all_2)
+    print(params_all_3)
     return 1
 
 if __name__ == '__main__':
