@@ -73,24 +73,32 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
     result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, time_zero_period, voltage[tr:t95]))
     result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis, time_zero_period, voltage[tr:t95]))
     result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis, time_zero_period, voltage[tr:t95]))
-    # print(result_1.x)
-    params = (result_1.x, result_2.x, result_3.x)
-    return params
+    # print(np.average(result_1.fun))
+    # print(np.average(result_2.fun))
+    # print(np.average(result_3.fun))
+    # print()
+    params = (R0, result_1.x, result_2.x, result_3.x)
+    residuals = (result_1.fun, result_2.fun, result_3.fun)
+    return params, residuals
 
-def soc_stuff(current):
-    c0 = current[0]
-    curr_old = c0
-    SOC = []
+def soc_calc(current):
+    curr_old = current[0]
+    Q_int = []
+    SOC = [1]
+    SOC_old = SOC[0]
     dt = 10
+    SOC_total = 0
     for curr in current:
         if curr == curr_old:
             pass
-        SOC.append(dt * 1 / 2 * (curr + curr_old))
+        Q_int.append(dt * 1 / 2 * (curr + curr_old))
         curr_old = curr
     Q = sum(SOC)
-    plt.plot(current)
-    plt.show()
-    return 1
+    Q = sum(Q_int)
+    for val in Q_int:
+        SOC_total += val
+        SOC.append(SOC_old - SOC_total / Q)
+    return np.array(SOC)
 
 def plot_side_by_side(period, current, voltage, ts, tr, t95):
     '''
@@ -142,24 +150,38 @@ def main():
     file_name = 'pulse_discharge_test_data.csv'
     time, voltage, current = read_data(file_name)
     periods = find_periods(current)
+    soc = soc_calc(current)
+    R_0 = []
     params_all_1 = []
     params_all_2 = []
     params_all_3 = []
     idx = 0
     for period in periods:
-        params = estimate_parameters(period, current, voltage, time)
+        params, residuals = estimate_parameters(period, current, voltage, time)
         if idx == 0:
-            params_all_1 = params[0]
-            params_all_2 = params[1]
-            params_all_3 = params[2]
+            R_0 = params[0]
+            params_all_1 = params[1]
+            params_all_2 = params[2]
+            params_all_3 = params[3]
             idx += 1
         else:
-            params_all_1 = np.vstack((params_all_1, params[0]))
-            params_all_2 = np.vstack((params_all_2, params[1]))
-            params_all_3 = np.vstack((params_all_3, params[2]))
-    print(params_all_1)
-    print(params_all_2)
-    print(params_all_3)
+            R_0 = np.vstack((R_0, params[0]))
+            params_all_1 = np.vstack((params_all_1, params[1]))
+            params_all_2 = np.vstack((params_all_2, params[2]))
+            params_all_3 = np.vstack((params_all_3, params[3]))
+    # print(R_0)
+    # print(params_all_1)
+    # print(params_all_2)
+    # print(params_all_3)
+    idx = 0
+    for i, t in enumerate(time):
+        if int(t) in [10 * period[0] for period in periods]:
+            plt.scatter(soc[i], params_all_1[idx, 0])
+            plt.scatter(soc[i], params_all_2[idx, 0])
+            if params_all_3[idx, 0] < 50:
+                plt.scatter(soc[i], params_all_3[idx, 0])
+            idx += 1
+    # plt.show()
     return 1
 
 if __name__ == '__main__':
