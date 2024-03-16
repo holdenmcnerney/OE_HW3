@@ -6,6 +6,12 @@ import scipy as sp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from collections import OrderedDict
+
+# Matplotlib global variables
+plt.rcParams['axes.grid'] = True
+mpl.rcParams['legend.loc'] = 'lower right'
+
 def read_data(file_name: str):
     '''
     Temp
@@ -39,7 +45,6 @@ def find_periods(current: np.array):
         else:
             periods.append([cutoff_old, cutoff[0] - 1])
             cutoff_old = period_cutoffs[i][0]
-
     return periods
 
 def estimate_parameters(period: list, current: np.array, voltage: np.array, time: np.array):
@@ -70,9 +75,15 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
     x0_2 = np.array([ocv_estimate, 10, 10, 1, 1])
     x0_3 = np.array([ocv_estimate, 10, 10, 10, 10, 1, 1])
     time_zero_period = (np.array(time[tr:t95]) - tr * 10)
-    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, time_zero_period, voltage[tr:t95]))
-    result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis, time_zero_period, voltage[tr:t95]))
-    result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis, time_zero_period, voltage[tr:t95]))
+    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, \
+                                                            time_zero_period, \
+                                                            voltage[tr:t95]))
+    result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis, \
+                                                            time_zero_period, \
+                                                            voltage[tr:t95]))
+    result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis, \
+                                                            time_zero_period, \
+                                                            voltage[tr:t95]))
     # print(np.average(result_1.fun))
     # print(np.average(result_2.fun))
     # print(np.average(result_3.fun))
@@ -111,13 +122,11 @@ def plot_side_by_side(period, current, voltage, ts, tr, t95):
     ax1.set_ylabel('voltage', color=color)
     ax1.plot(np.arange(ps, pe, 1), voltage[ps:pe], color=color)
     ax1.tick_params(axis='y', labelcolor=color)
-
     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
     color = 'tab:blue'
     ax2.set_ylabel('current', color=color)
     ax2.plot(np.arange(ps, pe, 1), current[ps:pe], color=color)
     ax2.tick_params(axis='y', labelcolor=color)
-
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.vlines(ts, 0, 70, colors='orange')
     plt.vlines(tr, 0, 70, colors='green')
@@ -135,13 +144,70 @@ def fun_2(x, i_ts, tr, v_tr):
     '''
     x is composed of OCV, R1, C1, R2, C2 in that order
     '''
-    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) - v_tr
+    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) \
+                - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) - v_tr
 
 def fun_3(x, i_ts, tr, v_tr):
     '''
     x is composed of OCV, R1, C1, R2, C2, R3, C3 in that order
     '''
-    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) - i_ts * x[5] * np.exp(-tr / (x[5] * x[6])) - v_tr
+    return x[0] - i_ts * x[1] * np.exp(-tr / (x[1] * x[2])) \
+                - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) \
+                - i_ts * x[5] * np.exp(-tr / (x[5] * x[6])) - v_tr
+
+def all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_3):
+    '''
+    Temp
+    '''
+    # RC elements vs SOC plotting
+    idx = 0
+    fig, ax = plt.subplots(2, 1)
+    ax[0].set_title(r'Reistance and Capacitance vs SOC')
+    ax[0].set_ylabel(r'Resistance, unit')
+    ax[1].set_ylabel(r'Capacitance, unit')
+    fig.supxlabel(r'SOC')
+    for i, t in enumerate(time):
+        if int(t) in [10 * period[0] for period in periods]:
+            ax[0].scatter(soc[i], params_all_1[idx, 1], color='g', marker='.', label='1 element, R1')
+            ax[0].scatter(soc[i], params_all_2[idx, 1], color='b', marker='.', label='2 elements, R1')
+            ax[0].scatter(soc[i], params_all_2[idx, 3], color='r', marker='.', label='2 elements, R2')
+            if params_all_3[idx, 0] < 50:
+                ax[0].scatter(soc[i], params_all_3[idx, 1], color='c', marker='.', label='3 elements, R1')
+                ax[0].scatter(soc[i], params_all_3[idx, 3], color='m', marker='.', label='3 elements, R2')
+                ax[0].scatter(soc[i], params_all_3[idx, 5], color='y', marker='.', label='3 elements, R3')
+            
+            ax[1].scatter(soc[i], params_all_1[idx, 2], color='g', marker='.', label='1 element, R1')
+            ax[1].scatter(soc[i], params_all_2[idx, 2], color='b', marker='.', label='2 elements, R1')
+            ax[1].scatter(soc[i], params_all_2[idx, 4], color='r', marker='.', label='2 elements, R2')
+            if params_all_3[idx, 0] < 50:
+                ax[1].scatter(soc[i], params_all_3[idx, 2], color='c', marker='.', label='3 elements, R1')
+                ax[1].scatter(soc[i], params_all_3[idx, 4], color='m', marker='.', label='3 elements, R2')
+                ax[1].scatter(soc[i], params_all_3[idx, 6], color='y', marker='.', label='3 elements, R3')
+            idx += 1
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = OrderedDict(zip(labels, handles))
+    ax[0].legend(by_label.values(), by_label.keys())
+    ax[1].legend(by_label.values(), by_label.keys())
+    plt.show()
+    
+    # OCV vs SOC plotting
+    idx = 0
+    fig2 = plt.figure(1)
+    plt.suptitle(r'OCV vs SOC')
+    plt.xlabel(r'SOC')
+    plt.ylabel(r'OCV')
+    for i, t in enumerate(time):
+        if int(t) in [10 * period[0] for period in periods]:
+            plt.scatter(soc[i], params_all_1[idx, 0], color='green', marker='.', label='1 element')
+            plt.scatter(soc[i], params_all_2[idx, 0], color='blue', marker='.', label='2 elements')
+            if params_all_3[idx, 0] < 50:
+                plt.scatter(soc[i], params_all_3[idx, 0], color='red', marker='.', label='3 elements')
+            idx += 1
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = OrderedDict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
+    plt.show()
+    return 1
 
 def main():
     '''
@@ -173,15 +239,7 @@ def main():
     # print(params_all_1)
     # print(params_all_2)
     # print(params_all_3)
-    idx = 0
-    for i, t in enumerate(time):
-        if int(t) in [10 * period[0] for period in periods]:
-            plt.scatter(soc[i], params_all_1[idx, 0])
-            plt.scatter(soc[i], params_all_2[idx, 0])
-            if params_all_3[idx, 0] < 50:
-                plt.scatter(soc[i], params_all_3[idx, 0])
-            idx += 1
-    # plt.show()
+    all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_3)
     return 1
 
 if __name__ == '__main__':
