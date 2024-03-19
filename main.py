@@ -14,7 +14,7 @@ mpl.rcParams['legend.loc'] = 'lower right'
 
 def read_data(file_name: str):
     '''
-    Temp
+    Reads in provided csv data.
     '''
     data = pd.read_csv(file_name)
     data['time (h:m:s)'] = pd.to_timedelta(data['time (h:m:s)']).dt.total_seconds()
@@ -30,7 +30,7 @@ def read_data(file_name: str):
 
 def find_periods(current: np.array):
     '''
-    Temp
+    Returns the rough rest periods.
     '''
     period_cutoffs = []
     periods = []
@@ -47,9 +47,13 @@ def find_periods(current: np.array):
             cutoff_old = period_cutoffs[i][0]
     return periods
 
-def estimate_parameters(period: list, current: np.array, voltage: np.array, time: np.array):
+def estimate_parameters(period: list, current: np.array, 
+                        voltage: np.array, time: np.array):
     '''
-    Temp
+    This function does two main things. It finds values in the rest period, such
+    as ts, tr=0, i_dis, and the start and stop times of sliced rest period.  The
+    function also calls nonlinear least squares and returns the residuals and 
+    estimated battery parameters: OCV, R1, C1, etc. 
     '''
     params = []
     ps = period[0]
@@ -68,29 +72,30 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
     R0 = (voltage[tr] - voltage[ts]) / idis
     R_1_est = (ocv_estimate - voltage[tr]) / idis
     C_1_est = 10 * (t95 - tr) / (3 * R_1_est)
-    # plot_side_by_side(period, current, voltage, ts, tr, t95)
     x0_1 = np.array([ocv_estimate, R_1_est, C_1_est])
-    x0_2 = np.array([ocv_estimate, R_1_est / 2, C_1_est, R_1_est / 2, C_1_est / 10])
-    x0_3 = np.array([ocv_estimate, R_1_est / 3, C_1_est, R_1_est / 3, C_1_est / 10, R_1_est / 3, C_1_est * 10])
+    x0_2 = np.array([ocv_estimate, R_1_est / 2, C_1_est,
+                      R_1_est / 2, C_1_est / 10])
+    x0_3 = np.array([ocv_estimate, R_1_est / 3, C_1_est, 
+                     R_1_est / 3, C_1_est / 10, 
+                     R_1_est / 3, C_1_est * 10])
     time_zero_period = (np.array(time[tr:t95]) - tr * 10)
-    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, \
-                                                            time_zero_period, \
+    result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis,
+                                                            time_zero_period,
                                                             voltage[tr:t95]))
-    result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis, \
-                                                            time_zero_period, \
+    result_2 = sp.optimize.least_squares(fun_2, x0_2, args=(idis,
+                                                            time_zero_period,
                                                             voltage[tr:t95]))
-    result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis, \
-                                                            time_zero_period, \
+    result_3 = sp.optimize.least_squares(fun_3, x0_3, args=(idis,
+                                                            time_zero_period,
                                                             voltage[tr:t95]))
-    # print(np.average(result_1.fun))
-    # print(np.average(result_2.fun))
-    # print(np.average(result_3.fun))
-    # print()
     params = (R0, result_1.x, result_2.x, result_3.x)
     residuals = (result_1.fun, result_2.fun, result_3.fun)
     return params, residuals
 
 def soc_calc(current):
+    '''
+    Calculates SOC and returns a time history of SOC over the data set.
+    '''
     curr_old = current[0]
     Q_int = []
     SOC = [1]
@@ -108,29 +113,6 @@ def soc_calc(current):
         SOC_total += val
         SOC.append(SOC_old - SOC_total / Q)
     return np.array(SOC)
-
-def plot_side_by_side(period, current, voltage, ts, tr, t95):
-    '''
-    Plots
-    '''
-    ps = period[0]
-    pe = period[1]
-    fig, ax1 = plt.subplots()
-    color = 'tab:red'
-    ax1.set_ylabel('voltage', color=color)
-    ax1.plot(np.arange(ps, pe, 1), voltage[ps:pe], color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    color = 'tab:blue'
-    ax2.set_ylabel('current', color=color)
-    ax2.plot(np.arange(ps, pe, 1), current[ps:pe], color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
-    fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.vlines(ts, 0, 70, colors='orange')
-    plt.vlines(tr, 0, 70, colors='green')
-    plt.vlines(t95, 0, 70, colors='blue')
-    plt.show()
-    return 1
 
 def fun_1(x, i_ts, tr, v_tr):
     '''
@@ -157,7 +139,10 @@ def all_the_plotting(time, soc, periods, R_0,
                      params_all_1, params_all_2, params_all_3, 
                      res_1, res_2, res_3):
     '''
-    Temp
+    Plots four graphs split between two different figures. First figure is 
+    resistance and capacitance as a function of SOC and the second figure is OCV 
+    as a function of SOC and least squares curve fitting residuals as a function 
+    of rest time joined together.
     '''
     # RC elements vs SOC plotting
     idx = 0
@@ -165,25 +150,52 @@ def all_the_plotting(time, soc, periods, R_0,
     ax[0].set_title(r'Reistance and Capacitance vs SOC')
     ax[0].set_ylabel(r'Resistance, unit')
     ax[1].set_ylabel(r'Capacitance, unit')
+    ax[0].set_ylim([-10, 175])
+    ax[1].set_ylim([-5, 100])
     fig.supxlabel(r'SOC')
     for i, t in enumerate(time):
         if int(t) in [10 * period[0] for period in periods]:
+            # Capacitance vs SOC plotting
             ax[0].scatter(soc[i], R_0[idx], color='k', marker='.', label='R0')
-            ax[0].scatter(soc[i], params_all_1[idx, 1], color='g', marker='.', label='1 element, R1')
-            ax[0].scatter(soc[i], params_all_2[idx, 1], color='b', marker='.', label='2 elements, R1')
-            ax[0].scatter(soc[i], params_all_2[idx, 3], color='r', marker='.', label='2 elements, R2')
-            if params_all_3[idx, 0] < 50:
-                ax[0].scatter(soc[i], params_all_3[idx, 1], color='c', marker='.', label='3 elements, R1')
-                ax[0].scatter(soc[i], params_all_3[idx, 3], color='m', marker='.', label='3 elements, R2')
-                ax[0].scatter(soc[i], params_all_3[idx, 5], color='y', marker='.', label='3 elements, R3')
+            ax[0].scatter(soc[i], params_all_1[idx, 1], 
+                          color='g', marker='.', 
+                          label='1 element, R1')
+            ax[0].scatter(soc[i], params_all_2[idx, 1], 
+                          color='b', marker='.', 
+                          label='2 elements, R1')
+            ax[0].scatter(soc[i], params_all_2[idx, 3], 
+                          color='r', marker='.', 
+                          label='2 elements, R2')
+            ax[0].scatter(soc[i], params_all_3[idx, 1], 
+                            color='c', marker='.', 
+                            label='3 elements, R1')
+            ax[0].scatter(soc[i], params_all_3[idx, 3], 
+                            color='m', marker='.', 
+                            label='3 elements, R2')
+            ax[0].scatter(soc[i], params_all_3[idx, 5], 
+                            color='y', marker='.', 
+                            label='3 elements, R3')
             
-            ax[1].scatter(soc[i], params_all_1[idx, 2], color='g', marker='.', label='1 element, C1')
-            ax[1].scatter(soc[i], params_all_2[idx, 2], color='b', marker='.', label='2 elements, C1')
-            ax[1].scatter(soc[i], params_all_2[idx, 4], color='r', marker='.', label='2 elements, C2')
-            if params_all_3[idx, 0] < 50:
-                ax[1].scatter(soc[i], params_all_3[idx, 2], color='c', marker='.', label='3 elements, C1')
-                ax[1].scatter(soc[i], params_all_3[idx, 4], color='m', marker='.', label='3 elements, C2')
-                ax[1].scatter(soc[i], params_all_3[idx, 6], color='y', marker='.', label='3 elements, C3')
+            # Capacitance vs SOC plotting
+            ax[1].scatter(soc[i], params_all_1[idx, 2], 
+                          color='g', marker='.', 
+                          label='1 element, C1')
+            ax[1].scatter(soc[i], params_all_2[idx, 2], 
+                          color='b', marker='.', 
+                          label='2 elements, C1')
+            ax[1].scatter(soc[i], params_all_2[idx, 4], 
+                          color='r', marker='.', 
+                          label='2 elements, C2')
+            
+            ax[1].scatter(soc[i], params_all_3[idx, 2], 
+                            color='c', marker='.', 
+                            label='3 elements, C1')
+            ax[1].scatter(soc[i], params_all_3[idx, 4], 
+                            color='m', marker='.', 
+                            label='3 elements, C2')
+            ax[1].scatter(soc[i], params_all_3[idx, 6], 
+                            color='y', marker='.', 
+                            label='3 elements, C3')
             idx += 1
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
@@ -197,29 +209,30 @@ def all_the_plotting(time, soc, periods, R_0,
     ax2[0].set_title(r'OCV vs SOC')
     ax2[0].set_xlabel(r'SOC')
     ax2[0].set_ylabel(r'OCV')
+    ax2[0].set_ylim([22, 26.5])
     ax2[1].set_xlabel(r'Time in each rest period, s')
     ax2[1].set_ylabel(r'Residuals')
+    ax2[1].set_ylim([-0.75, 1.5])
     for i, t in enumerate(time):
         if int(t) in [10 * period[0] for period in periods]:
-            ax2[0].scatter(soc[i], params_all_1[idx, 0], color='green', marker='.', label='1 element')
-            ax2[0].scatter(soc[i], params_all_2[idx, 0], color='blue', marker='.', label='2 elements')
-            if params_all_3[idx, 0] < 50:
-                ax2[0].scatter(soc[i], params_all_3[idx, 0], color='red', marker='.', label='3 elements')
+            ax2[0].scatter(soc[i], params_all_1[idx, 0], color='green', marker='.', label='1 Element')
+            ax2[0].scatter(soc[i], params_all_2[idx, 0], color='blue', marker='.', label='2 Elements')
+            ax2[0].scatter(soc[i], params_all_3[idx, 0], color='red', marker='.', label='3 Elements')
             idx += 1
     res_len = len(res_1)
-    ax2[1].plot(np.arange(0, res_len, 1), res_1, label='1 Element Residuals')
-    ax2[1].plot(np.arange(0, res_len, 1), res_2, label='2 Element Residuals')
-    ax2[1].plot(np.arange(0, res_len, 1), res_3, label='3 Element Residuals')
+    ax2[1].plot(np.arange(0, res_len, 1), res_1, color='green', label='1 Element')
+    ax2[1].plot(np.arange(0, res_len, 1), res_2, color='blue', label='2 Elements')
+    ax2[1].plot(np.arange(0, res_len, 1), res_3, color='red', label='3 Elements')
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
-    ax[1].legend(by_label.values(), by_label.keys())
-    ax[0].legend(by_label.values(), by_label.keys())
+    ax2[0].legend(by_label.values(), by_label.keys())
+    ax2[1].legend(by_label.values(), by_label.keys())
     plt.show()
     return 1
 
 def main():
     '''
-    Temp
+    Main Function
     '''
     file_name = 'pulse_discharge_test_data.csv'
     time, voltage, current = read_data(file_name)
