@@ -10,7 +10,7 @@ from collections import OrderedDict
 
 # Matplotlib global variables
 plt.rcParams['axes.grid'] = True
-mpl.rcParams['legend.loc'] = 'lower right'
+mpl.rcParams['legend.loc'] = 'best'
 
 def read_data(file_name: str):
     '''
@@ -147,11 +147,11 @@ def all_the_plotting(time, soc, periods, R_0,
     # RC elements vs SOC plotting
     idx = 0
     fig, ax = plt.subplots(2, 1)
-    ax[0].set_title(r'Reistance and Capacitance vs SOC')
-    ax[0].set_ylabel(r'Resistance, unit')
-    ax[1].set_ylabel(r'Capacitance, unit')
-    ax[0].set_ylim([-10, 175])
-    ax[1].set_ylim([-5, 100])
+    ax[0].set_title(r'Resistance and Capacitance vs SOC')
+    ax[0].set_ylabel(r'Resistance, ohms')
+    ax[1].set_ylabel(r'Capacitance, farads')
+    ax[0].set_ylim([-10, 250])
+    ax[1].set_ylim([-5, 125])
     fig.supxlabel(r'SOC')
     for i, t in enumerate(time):
         if int(t) in [10 * period[0] for period in periods]:
@@ -199,7 +199,12 @@ def all_the_plotting(time, soc, periods, R_0,
             idx += 1
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
-    ax[0].legend(by_label.values(), by_label.keys())
+    # Handles/labels are weird
+    cust_dict = ['R0',
+                 '1 element, R1', 
+                 '2 elements, R1', '2 elements, R2', 
+                 '3 elements, R1', '3 elements, R2', '3 elements, R3']
+    ax[0].legend(cust_dict)
     ax[1].legend(by_label.values(), by_label.keys())
     plt.show()
     
