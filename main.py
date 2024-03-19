@@ -65,15 +65,13 @@ def estimate_parameters(period: list, current: np.array, voltage: np.array, time
         if flag == 1 and volt >= 0.95 * (ocv_estimate - voltage[tr]) + voltage[tr]:
             t95 = i + ps
             break
-    # print(f'''idis: {idis}, ts: {ts}, tr: {tr}''')
-    # print(f'''voltage at tr = 0: {voltage[tr]} and voltage at ts: {voltage[ts]}''')
     R0 = (voltage[tr] - voltage[ts]) / idis
-    # print(f'''R0: {R0}''')
-    # Optional plotting for understanding the problem
+    R_1_est = (ocv_estimate - voltage[tr]) / idis
+    C_1_est = 10 * (t95 - tr) / (3 * R_1_est)
     # plot_side_by_side(period, current, voltage, ts, tr, t95)
-    x0_1 = np.array([ocv_estimate, 10, 10])
-    x0_2 = np.array([ocv_estimate, 10, 10, 1, 1])
-    x0_3 = np.array([ocv_estimate, 10, 10, 10, 10, 1, 1])
+    x0_1 = np.array([ocv_estimate, R_1_est, C_1_est])
+    x0_2 = np.array([ocv_estimate, R_1_est / 2, C_1_est, R_1_est / 2, C_1_est / 10])
+    x0_3 = np.array([ocv_estimate, R_1_est / 3, C_1_est, R_1_est / 3, C_1_est / 10, R_1_est / 3, C_1_est * 10])
     time_zero_period = (np.array(time[tr:t95]) - tr * 10)
     result_1 = sp.optimize.least_squares(fun_1, x0_1, args=(idis, \
                                                             time_zero_period, \
@@ -155,7 +153,9 @@ def fun_3(x, i_ts, tr, v_tr):
                 - i_ts * x[3] * np.exp(-tr / (x[3] * x[4])) \
                 - i_ts * x[5] * np.exp(-tr / (x[5] * x[6])) - v_tr
 
-def all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_3):
+def all_the_plotting(time, soc, periods, R_0, 
+                     params_all_1, params_all_2, params_all_3, 
+                     res_1, res_2, res_3):
     '''
     Temp
     '''
@@ -168,6 +168,7 @@ def all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_
     fig.supxlabel(r'SOC')
     for i, t in enumerate(time):
         if int(t) in [10 * period[0] for period in periods]:
+            ax[0].scatter(soc[i], R_0[idx], color='k', marker='.', label='R0')
             ax[0].scatter(soc[i], params_all_1[idx, 1], color='g', marker='.', label='1 element, R1')
             ax[0].scatter(soc[i], params_all_2[idx, 1], color='b', marker='.', label='2 elements, R1')
             ax[0].scatter(soc[i], params_all_2[idx, 3], color='r', marker='.', label='2 elements, R2')
@@ -176,13 +177,13 @@ def all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_
                 ax[0].scatter(soc[i], params_all_3[idx, 3], color='m', marker='.', label='3 elements, R2')
                 ax[0].scatter(soc[i], params_all_3[idx, 5], color='y', marker='.', label='3 elements, R3')
             
-            ax[1].scatter(soc[i], params_all_1[idx, 2], color='g', marker='.', label='1 element, R1')
-            ax[1].scatter(soc[i], params_all_2[idx, 2], color='b', marker='.', label='2 elements, R1')
-            ax[1].scatter(soc[i], params_all_2[idx, 4], color='r', marker='.', label='2 elements, R2')
+            ax[1].scatter(soc[i], params_all_1[idx, 2], color='g', marker='.', label='1 element, C1')
+            ax[1].scatter(soc[i], params_all_2[idx, 2], color='b', marker='.', label='2 elements, C1')
+            ax[1].scatter(soc[i], params_all_2[idx, 4], color='r', marker='.', label='2 elements, C2')
             if params_all_3[idx, 0] < 50:
-                ax[1].scatter(soc[i], params_all_3[idx, 2], color='c', marker='.', label='3 elements, R1')
-                ax[1].scatter(soc[i], params_all_3[idx, 4], color='m', marker='.', label='3 elements, R2')
-                ax[1].scatter(soc[i], params_all_3[idx, 6], color='y', marker='.', label='3 elements, R3')
+                ax[1].scatter(soc[i], params_all_3[idx, 2], color='c', marker='.', label='3 elements, C1')
+                ax[1].scatter(soc[i], params_all_3[idx, 4], color='m', marker='.', label='3 elements, C2')
+                ax[1].scatter(soc[i], params_all_3[idx, 6], color='y', marker='.', label='3 elements, C3')
             idx += 1
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
@@ -192,20 +193,27 @@ def all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_
     
     # OCV vs SOC plotting
     idx = 0
-    fig2 = plt.figure(1)
-    plt.suptitle(r'OCV vs SOC')
-    plt.xlabel(r'SOC')
-    plt.ylabel(r'OCV')
+    fig2, ax2 = plt.subplots(2, 1)
+    ax2[0].set_title(r'OCV vs SOC')
+    ax2[0].set_xlabel(r'SOC')
+    ax2[0].set_ylabel(r'OCV')
+    ax2[1].set_xlabel(r'Time in each rest period, s')
+    ax2[1].set_ylabel(r'Residuals')
     for i, t in enumerate(time):
         if int(t) in [10 * period[0] for period in periods]:
-            plt.scatter(soc[i], params_all_1[idx, 0], color='green', marker='.', label='1 element')
-            plt.scatter(soc[i], params_all_2[idx, 0], color='blue', marker='.', label='2 elements')
+            ax2[0].scatter(soc[i], params_all_1[idx, 0], color='green', marker='.', label='1 element')
+            ax2[0].scatter(soc[i], params_all_2[idx, 0], color='blue', marker='.', label='2 elements')
             if params_all_3[idx, 0] < 50:
-                plt.scatter(soc[i], params_all_3[idx, 0], color='red', marker='.', label='3 elements')
+                ax2[0].scatter(soc[i], params_all_3[idx, 0], color='red', marker='.', label='3 elements')
             idx += 1
+    res_len = len(res_1)
+    ax2[1].plot(np.arange(0, res_len, 1), res_1, label='1 Element Residuals')
+    ax2[1].plot(np.arange(0, res_len, 1), res_2, label='2 Element Residuals')
+    ax2[1].plot(np.arange(0, res_len, 1), res_3, label='3 Element Residuals')
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys())
+    ax[1].legend(by_label.values(), by_label.keys())
+    ax[0].legend(by_label.values(), by_label.keys())
     plt.show()
     return 1
 
@@ -217,10 +225,6 @@ def main():
     time, voltage, current = read_data(file_name)
     periods = find_periods(current)
     soc = soc_calc(current)
-    R_0 = []
-    params_all_1 = []
-    params_all_2 = []
-    params_all_3 = []
     idx = 0
     for period in periods:
         params, residuals = estimate_parameters(period, current, voltage, time)
@@ -229,17 +233,21 @@ def main():
             params_all_1 = params[1]
             params_all_2 = params[2]
             params_all_3 = params[3]
+            res_1 = residuals[0]
+            res_2 = residuals[1]
+            res_3 = residuals[2]
             idx += 1
         else:
             R_0 = np.vstack((R_0, params[0]))
             params_all_1 = np.vstack((params_all_1, params[1]))
             params_all_2 = np.vstack((params_all_2, params[2]))
             params_all_3 = np.vstack((params_all_3, params[3]))
-    # print(R_0)
-    # print(params_all_1)
-    # print(params_all_2)
-    # print(params_all_3)
-    all_the_plotting(time, soc, periods, params_all_1, params_all_2, params_all_3)
+            res_1 = np.hstack((res_1, residuals[0]))
+            res_2 = np.hstack((res_2, residuals[1]))
+            res_3 = np.hstack((res_3, residuals[2]))
+    all_the_plotting(time, soc, periods, R_0, 
+                     params_all_1, params_all_2, params_all_3, 
+                     res_1, res_2, res_3)
     return 1
 
 if __name__ == '__main__':
